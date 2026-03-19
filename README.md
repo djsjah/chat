@@ -1,9 +1,30 @@
 # Чат образовательной платформы между студентом и его ментором
 
-## Java, Spring, JPA, Liquibase, PostgreSQL, Keycloak, Centrifugo, Debezium, Kafka, Redis
-## Документация - chat/src/main/resources/static/openapi.yml
-## Инструментальные средства разработки ПО
-## Ноздряков Богдан M4106
+Проект реализован с использованием следующих технологий:
+- Java
+- Spring
+- JPA
+- Liquibase
+- PostgreSQL
+- Keycloak
+- Centrifugo
+- Debezium
+- Kafka
+- Redis
+
+## Документация
+
+OpenAPI-спецификация находится по пути:
+
+`src/main/resources/static/openapi.yml`
+
+## Дисциплина
+
+Инструментальные средства разработки ПО
+
+## Автор
+
+Ноздряков Богдан, M4106
 
 ### Скриншоты
 ![Скриншот 1](docs/1.png)
