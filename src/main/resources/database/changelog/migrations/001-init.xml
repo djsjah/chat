@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="2026-02-28-001-init" author="bogdan">
+        <sql>
+            CREATE TYPE realtime_server_api_method AS ENUM (
+                'publish',
+                'broadcast'
+            );
+        </sql>
+
+        <createTable tableName="member">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+
+            <column name="subject" type="text">
+                <constraints nullable="false" unique="true"/>
+            </column>
+
+            <column name="name" type="varchar(64)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+
+            <column name="is_deleted" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="deleted_at" type="timestamp with time zone"/>
+        </createTable>
+        
+        <createTable tableName="room">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+
+            <column name="last_message_id" type="bigint">
+                <constraints unique="true"/>
+            </column>
+
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="bumped_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <sql>
+            ALTER TABLE room
+            ADD CONSTRAINT chk_version_positive
+            CHECK (version >= 0);
+        </sql>
+
+        <createTable tableName="room_member">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+
+            <column name="room_id" type="bigint">
+                <constraints nullable="false"
+                             referencedTableName="room"
+                             referencedColumnNames="id"
+                             foreignKeyName="fk_room_member_room"
+                             deleteCascade="true"/>
+            </column>
+
+            <column name="member_id" type="bigint">
+                <constraints nullable="false"
+                             referencedTableName="member"
+                             referencedColumnNames="id"
+                             foreignKeyName="fk_room_member_member"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+                tableName="room_member"
+                columnNames="room_id,member_id"
+                constraintName="uk_room_member"/>
+        
+        <createTable tableName="message">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+
+            <column name="room_id" type="bigint">
+                <constraints nullable="false"
+                             referencedTableName="room"
+                             referencedColumnNames="id"
+                             foreignKeyName="fk_message_room"
+                             deleteCascade="true"/>
+            </column>
+
+            <column name="member_id" type="bigint">
+                <constraints nullable="false"
+                             referencedTableName="member"
+                             referencedColumnNames="id"
+                             foreignKeyName="fk_message_member"/>
+            </column>
+
+            <column name="parent_id" type="bigint"/>
+
+            <column name="content" type="text">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="updated_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="message"
+                baseColumnNames="parent_id"
+                referencedTableName="message"
+                referencedColumnNames="id"
+                constraintName="fk_message_parent"
+                onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+                baseTableName="room"
+                baseColumnNames="last_message_id"
+                referencedTableName="message"
+                referencedColumnNames="id"
+                constraintName="fk_room_message"
+                onDelete="SET NULL"/>
+
+        <createTable tableName="cdc">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+
+            <column name="method" type="realtime_server_api_method" defaultValue="publish">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="payload" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="partition" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,52 @@
+server:
+  port: 3000
+
+springdoc:
+  swagger-ui:
+    path: /api
+    url: /openapi.yml
+    disable-swagger-default-url: true
+    oauth:
+      client-id: chat-swagger
+      use-pkce-with-authorization-code-grant: true
+      additionalQueryStringParams:
+        prompt: login
+    oauth2RedirectUrl: http://localhost:3000/swagger-ui/oauth2-redirect.html
+  api-docs:
+    path: /api-docs
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 20
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+  liquibase:
+    enabled: true
+    change-log: classpath:database/changelog/database.changelog-master.yml
+
+realtime-server:
+  secret-key: ${REALTIME_SERVER_SECRET_KEY}
+  outbox:
+    partitions: 1

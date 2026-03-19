@@ -1,0 +1,127 @@
+{
+  "id": "chat",
+  "realm": "chat",
+  "enabled": true,
+
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+
+  "roles": {
+    "realm": [
+      { "name": "admin" },
+      { "name": "member" }
+    ]
+  },
+
+  "smtpServer": {
+    "host": "mailhog",
+    "port": "1025",
+    "from": "no-reply@chat.local",
+    "fromDisplayName": "Chat",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
+
+  "clients": [
+    {
+      "clientId": "chat-cli",
+      "name": "Chat CLI (dev)",
+      "enabled": true,
+      "protocol": "openid-connect",
+
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "chat-swagger",
+      "name": "Chat Swagger UI",
+      "enabled": true,
+      "protocol": "openid-connect",
+
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+
+      "redirectUris": [
+        "http://localhost:3000/swagger-ui/oauth2-redirect.html",
+        "http://localhost:3000/swagger-ui/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "voyagerbvb@gmail.com",
+      "email": "voyagerbvb@gmail.com",
+      "firstName": "Bogdan",
+      "lastName": "Nozdryakov",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "barsik123", "temporary": false }
+      ],
+      "realmRoles": [ "member" ]
+    },
+    {
+      "username": "round.robin8902@gmail.com",
+      "email": "round.robin8902@gmail.com",
+      "firstName": "Jason",
+      "lastName": "Todd",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "cabanchik45", "temporary": false }
+      ],
+      "realmRoles": [ "member" ]
+    },
+    {
+      "username": "st1035@mail.ru",
+      "email": "st1035@mail.ru",
+      "firstName": "Igor",
+      "lastName": "Vasiliev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "meow", "temporary": false }
+      ],
+      "realmRoles": [ "admin" ]
+    },
+    {
+      "username": "solarbvb@gmail.com",
+      "email": "solarbvb@gmail.com",
+      "firstName": "Ahn",
+      "lastName": "Yujin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "jwt892", "temporary": false }
+      ],
+      "realmRoles": [ "member" ]
+    },
+    {
+      "username": "awesom-e4000@mail.ru",
+      "email": "awesom-e4000@mail.ru",
+      "firstName": "Janq",
+      "lastName": "Wonyoung",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "782hdk", "temporary": false }
+      ],
+      "realmRoles": [ "member" ]
+    }
+  ]
+}
