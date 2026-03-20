@@ -8,7 +8,7 @@ import com.chat.model.MemberResponseDTO;
 import com.chat.security.guard.MemberGuard;
 
 @RestController
-@RequestMapping("/api/members")
+@RequestMapping("/api")
 @MemberGuard
 @RequiredArgsConstructor
 public class MemberController implements MembersApi {

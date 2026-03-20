@@ -12,7 +12,7 @@ import com.chat.model.MessageWithRoomDTO;
 import com.chat.security.guard.MemberGuard;
 
 @RestController
-@RequestMapping("/api/messages")
+@RequestMapping("/api")
 @MemberGuard
 @RequiredArgsConstructor
 public class MessageController implements MessagesApi {

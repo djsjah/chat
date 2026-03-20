@@ -9,7 +9,7 @@ import com.chat.model.AdminMessageExtendedDTO;
 import com.chat.security.guard.AdminGuard;
 
 @RestController
-@RequestMapping("/api/admin/messages")
+@RequestMapping("/api")
 @AdminGuard
 @RequiredArgsConstructor
 public class AdminMessageController implements AdminMessagesApi {

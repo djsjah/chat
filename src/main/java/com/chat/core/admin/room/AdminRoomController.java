@@ -13,7 +13,7 @@ import com.chat.model.AdminRoomWithMemberDTO;
 import com.chat.security.guard.AdminGuard;
 
 @RestController
-@RequestMapping("/api/admin/rooms")
+@RequestMapping("/api")
 @AdminGuard
 @RequiredArgsConstructor
 public class AdminRoomController implements AdminRoomsApi {

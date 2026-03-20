@@ -9,7 +9,7 @@ import com.chat.model.RealtimeTokenDTO;
 import com.chat.security.guard.MemberGuard;
 
 @RestController
-@RequestMapping("/api/realtime/token")
+@RequestMapping("/api")
 @MemberGuard
 @RequiredArgsConstructor
 public class RealtimeTokenController implements RealtimeApi {
