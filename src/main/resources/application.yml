@@ -46,6 +46,20 @@ spring:
     enabled: true
     change-log: classpath:database/changelog/database.changelog-master.yml
 
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
 realtime-server:
   secret-key: ${REALTIME_SERVER_SECRET_KEY}
   outbox:

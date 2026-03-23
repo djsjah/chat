@@ -7,9 +7,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.chat.app.AfterCommitExecutor;
 import com.chat.app.event.ChatEvent;
-import com.chat.cdc.CdcInternalService;
+import com.chat.app.metric.ChatMetricService;
 import com.chat.cdc.dto.CdcCreateDTO;
+import com.chat.cdc.service.CdcInternalService;
 import com.chat.core.admin.room.AdminRoomMapper;
 import com.chat.core.member.event.MemberEventFactory;
 import com.chat.core.member.event.payload.MemberEventPayload;
@@ -26,6 +28,8 @@ import com.chat.persistence.room.RoomMember;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class AdminRoomMemberFacade {
     private final ObjectMapper objectMapper;
+    private final AfterCommitExecutor afterCommitExecutor;
+    private final ChatMetricService metricService;
 
     private final AdminRoomInternalService roomInternalService;
     private final AdminRoomMemberInternalService roomMemberInternalService;
@@ -59,7 +63,9 @@ public class AdminRoomMemberFacade {
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
-        return roomMapper.toResponseWithMemberDTO(room, roomMember.getMember());
+        AdminRoomWithMemberDTO response = roomMapper.toResponseWithMemberDTO(room, roomMember.getMember());
+        afterCommitExecutor.run(metricService::markMemberJoined);
+        return response;
     }
 
     @Transactional
@@ -87,6 +93,8 @@ public class AdminRoomMemberFacade {
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
-        return roomMapper.toResponseDTO(room);
+        AdminRoomResponseDTO response = roomMapper.toResponseDTO(room);
+        afterCommitExecutor.run(metricService::markMemberLeft);
+        return response;
     }
 }

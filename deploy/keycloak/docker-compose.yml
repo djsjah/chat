@@ -46,9 +46,9 @@ services:
 
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
-    command: ["start-dev", "--http-port=8081", "--import-realm"]
+    command: [ "start-dev", "--http-port=8081", "--import-realm" ]
     volumes:
-      - ./keycloak/import:/opt/keycloak/data/import:ro
+      - ./import:/opt/keycloak/data/import:ro
     ports:
       - "8081:8081"
 

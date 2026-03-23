@@ -32,7 +32,12 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/oauth2-redirect.html",
-                                "/openapi.yml"
+                                "/openapi.yml",
+                                "/actuator",
+                                "/actuator/prometheus",
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/actuator/metrics/**"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("admin")
                         .requestMatchers("/api/**").hasAnyRole("member", "admin")

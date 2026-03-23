@@ -9,9 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 
+import com.chat.app.AfterCommitExecutor;
 import com.chat.app.event.ChatEvent;
-import com.chat.cdc.CdcInternalService;
+import com.chat.app.metric.ChatMetricService;
 import com.chat.cdc.dto.CdcCreateDTO;
+import com.chat.cdc.service.CdcInternalService;
 import com.chat.core.message.MessageMapper;
 import com.chat.core.message.event.MessageEventFactory;
 import com.chat.core.message.event.payload.MessageEventPayload;
@@ -32,6 +34,8 @@ import com.chat.security.CurrentMemberProvider;
 public class MessageFacade {
     private final ObjectMapper objectMapper;
     private final CurrentMemberProvider currentMember;
+    private final AfterCommitExecutor afterCommitExecutor;
+    private final ChatMetricService metricService;
 
     private final MessageInternalService messageInternalService;
     private final MessageEventFactory messageEventFactory;
@@ -66,7 +70,9 @@ public class MessageFacade {
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
-        return messageMapper.toResponseWithRoomDTO(newMessage, room);
+        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(newMessage, room);
+        afterCommitExecutor.run(metricService::markMessageCreated);
+        return response;
     }
 
     @Transactional
@@ -100,7 +106,9 @@ public class MessageFacade {
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
-        return messageMapper.toResponseWithRoomDTO(updatedMessage, room);
+        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(updatedMessage, room);
+        afterCommitExecutor.run(metricService::markMessageUpdated);
+        return response;
     }
 
     @Transactional
@@ -136,6 +144,8 @@ public class MessageFacade {
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
-        return messageMapper.toResponseWithRoomDTO(deletedMessage, room);
+        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(deletedMessage, room);
+        afterCommitExecutor.run(metricService::markMessageDeleted);
+        return response;
     }
 }

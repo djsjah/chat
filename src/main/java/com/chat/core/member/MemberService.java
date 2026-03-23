@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.chat.app.AfterCommitExecutor;
+import com.chat.app.metric.ChatMetricService;
 import com.chat.model.MemberResponseDTO;
 import com.chat.persistence.member.Member;
 import com.chat.persistence.member.repository.MemberRepository;
@@ -16,6 +18,8 @@ import com.chat.security.CurrentMemberProvider;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class MemberService {
     private final CurrentMemberProvider currentMember;
+    private final AfterCommitExecutor afterCommitExecutor;
+    private final ChatMetricService chatMetricService;
     private final MemberRepository memberRepository;
     private final MemberMapper memberMapper;
 
@@ -28,8 +32,10 @@ public class MemberService {
 
     @Transactional
     public MemberResponseDTO create() {
-        return memberMapper.toResponseDTO(
-                memberRepository.save(new Member(currentMember.subject(), currentMember.name()))
-        );
+        Member member = memberRepository.save(new Member(currentMember.subject(), currentMember.name()));
+        MemberResponseDTO response = memberMapper.toResponseDTO(member);
+
+        afterCommitExecutor.run(chatMetricService::markMemberCreated);
+        return response;
     }
 }

@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.chat.api.RealtimeApi;
+import com.chat.infrastructure.realtime.service.RealtimeService;
 import com.chat.model.RealtimeTokenDTO;
 import com.chat.security.guard.MemberGuard;
 

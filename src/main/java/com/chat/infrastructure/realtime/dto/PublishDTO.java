@@ -1,11 +1,12 @@
 package com.chat.infrastructure.realtime.dto;
 
-import com.chat.infrastructure.realtime.RealtimeEvent;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
 import java.util.Map;
+
+import com.chat.infrastructure.realtime.RealtimeEvent;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
