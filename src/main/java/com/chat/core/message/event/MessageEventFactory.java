@@ -41,7 +41,12 @@ public class MessageEventFactory {
         roomNode.put("version", room.getVersion());
         roomNode.put("bumpedAt", room.getBumpedAt().toString());
 
-        roomNode.set("lastMessage", objectMapper.valueToTree(room.getLastMessage()));
+        if (room.getLastMessage() != null) {
+            roomNode.put("lastMessageId", room.getLastMessage().getId());
+        } else {
+            roomNode.putNull("lastMessageId");
+        }
+
         root.set("room", roomNode);
 
         ObjectNode memberNode = objectMapper.createObjectNode();
@@ -49,7 +54,6 @@ public class MessageEventFactory {
         memberNode.put("memberName", memberName);
 
         root.set("member", memberNode);
-
         return root;
     }
 }

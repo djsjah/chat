@@ -1,0 +1,58 @@
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+
+  rule {
+    target_label = "job"
+    replacement  = "docker"
+  }
+
+  rule {
+    target_label = "service"
+    replacement  = "chat-observability"
+  }
+}
+
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_logs.output
+  forward_to = [loki.write.default.receiver]
+}
+
+local.file_match "chat_service_file" {
+  path_targets = [
+    {
+      "__path__"  = "/var/log/chat/chat-service.log",
+      "job"       = "chat-service-file",
+      "service"   = "chat-service",
+      "source"    = "bootRun",
+      "env"       = "local",
+    },
+  ]
+}
+
+loki.source.file "chat_service_file" {
+  targets       = local.file_match.chat_service_file.targets
+  forward_to    = [loki.write.default.receiver]
+  tail_from_end = true
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -15,6 +15,14 @@ public interface AdminRoomRepository extends JpaRepository<Room, Long> {
     @Query("""
             SELECT r
             FROM Room r
+            WHERE r.id = :id
+            """)
+    Optional<Room> findOneByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT r
+            FROM Room r
             INNER JOIN RoomMember rm on rm.room = r
             INNER JOIN rm.member m
             WHERE r.id = :id AND m.id = :memberId AND m.isDeleted = false

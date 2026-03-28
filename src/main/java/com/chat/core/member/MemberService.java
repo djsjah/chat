@@ -2,19 +2,21 @@ package com.chat.core.member;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.chat.app.AfterCommitExecutor;
-import com.chat.app.metric.ChatMetricService;
+import com.chat.app.service.ChatMetricService;
 import com.chat.model.MemberResponseDTO;
 import com.chat.persistence.member.Member;
 import com.chat.persistence.member.repository.MemberRepository;
 import com.chat.security.CurrentMemberProvider;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class MemberService {
     private final CurrentMemberProvider currentMember;
@@ -34,6 +36,13 @@ public class MemberService {
     public MemberResponseDTO create() {
         Member member = memberRepository.save(new Member(currentMember.subject(), currentMember.name()));
         MemberResponseDTO response = memberMapper.toResponseDTO(member);
+
+        log.info(
+                "Member created: memberSubject={}, memberId={}, memberName={}",
+                member.getSubject(),
+                member.getId(),
+                member.getName()
+        );
 
         afterCommitExecutor.run(chatMetricService::markMemberCreated);
         return response;

@@ -2,6 +2,7 @@ package com.chat.infrastructure.realtime.service;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import com.chat.persistence.room.repository.RoomMemberRepository;
 import com.chat.security.CurrentMemberProvider;
 
 @Service
+@Slf4j
 public class RealtimeService {
     public static final long EXP_CONNECTION_TIME_OFFSET_SECONDS = 120L;
     public static final long EXP_SUBSCRIPTION_TIME_OFFSET_SECONDS = 300L;
@@ -51,16 +53,23 @@ public class RealtimeService {
                     .compact();
 
             realtimeMetricService.markConnectionTokenGenerated();
+
+            log.info("Realtime connection token generated: memberSubject={}", subject);
             return token;
         });
     }
 
     public String generateSubscriptionToken(Long roomId) {
         return realtimeMetricService.recordSubscriptionToken(() -> {
-            try {
-                String subject = currentMember.subject();
+            String subject = currentMember.subject();
 
+            try {
                 if (!roomMemberRepository.existsByRoomIdAndMemberSubject(roomId, subject)) {
+                    log.warn(
+                            "Realtime subscription token generation failed: memberSubject={}, roomId={}",
+                            subject,
+                            roomId
+                    );
                     throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested room not found");
                 }
 
@@ -75,6 +84,14 @@ public class RealtimeService {
                         .compact();
 
                 realtimeMetricService.markSubscriptionTokenGenerated();
+
+                log.info(
+                        "Realtime subscription token generated: memberSubject={}, roomId={}, channel={}",
+                        subject,
+                        roomId,
+                        channel
+                );
+
                 return token;
             } catch (RuntimeException ex) {
                 realtimeMetricService.markSubscriptionTokenError();

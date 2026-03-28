@@ -60,6 +60,15 @@ management:
       export:
         enabled: true
 
+logging:
+  file:
+    name: logs/chat-service.log
+  level:
+    root: INFO
+    com.chat: DEBUG
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
 realtime-server:
   secret-key: ${REALTIME_SERVER_SECRET_KEY}
   outbox:

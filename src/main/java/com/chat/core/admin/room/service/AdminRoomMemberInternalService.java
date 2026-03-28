@@ -22,7 +22,7 @@ public class AdminRoomMemberInternalService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public RoomMember create(Long memberId, Room room) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findActiveOneById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested member not found"));
 
         return roomMemberRepository.save(new RoomMember(room, member));

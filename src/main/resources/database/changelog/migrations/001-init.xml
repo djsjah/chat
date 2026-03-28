@@ -7,13 +7,6 @@
           http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
     <changeSet id="2026-02-28-001-init" author="bogdan">
-        <sql>
-            CREATE TYPE realtime_server_api_method AS ENUM (
-                'publish',
-                'broadcast'
-            );
-        </sql>
-
         <createTable tableName="member">
             <column name="id" type="bigint" autoIncrement="true">
                 <constraints primaryKey="true"/>
@@ -148,7 +141,7 @@
                 <constraints primaryKey="true"/>
             </column>
 
-            <column name="method" type="realtime_server_api_method" defaultValue="publish">
+            <column name="method" type="varchar(255)">
                 <constraints nullable="false"/>
             </column>
 

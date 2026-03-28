@@ -2,6 +2,7 @@ package com.chat.app;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +18,7 @@ import com.chat.app.dto.ApiErrorDTO;
 import com.chat.app.dto.FieldErrorDTO;
 
 @RestControllerAdvice
+@Slf4j
 public class AppExceptionHandler {
     private static ResponseEntity<ApiErrorDTO> build(HttpStatus status, String message) {
         return ResponseEntity
@@ -78,5 +80,18 @@ public class AppExceptionHandler {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
         return build(status, message);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorDTO> handle(Exception ex) {
+        log.error("Unhandled exception", ex);
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiErrorDTO(
+                        HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                        HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+                        "Internal server error"
+                ));
     }
 }

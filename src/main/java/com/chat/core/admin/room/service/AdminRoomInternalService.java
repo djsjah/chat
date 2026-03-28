@@ -17,6 +17,12 @@ class AdminRoomInternalService {
     private final AdminRoomRepository roomRepository;
 
     @Transactional(propagation = Propagation.MANDATORY)
+    public Room getOneByIdForUpdate(Long roomId) {
+        return roomRepository.findOneByIdForUpdate(roomId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested room not found"));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     public Room getAccessibleByIdForUpdate(Long roomId, Long memberId) {
         return roomRepository.findAccessibleByIdForUpdate(roomId, memberId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested room not found"));

@@ -3,6 +3,7 @@ package com.chat.core.message.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,7 +12,7 @@ import java.time.OffsetDateTime;
 
 import com.chat.app.AfterCommitExecutor;
 import com.chat.app.event.ChatEvent;
-import com.chat.app.metric.ChatMetricService;
+import com.chat.app.service.ChatMetricService;
 import com.chat.cdc.dto.CdcCreateDTO;
 import com.chat.cdc.service.CdcInternalService;
 import com.chat.core.message.MessageMapper;
@@ -30,6 +31,7 @@ import com.chat.persistence.room.Room;
 import com.chat.security.CurrentMemberProvider;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class MessageFacade {
     private final ObjectMapper objectMapper;
@@ -64,13 +66,33 @@ public class MessageFacade {
                 .idempotencyKey(RealtimeUtils.generateIdempotencyKey(ChatEvent.MESSAGE_ADDED, newMessage.getId()))
                 .build();
 
+        long partition = cdcInternalService.calcPartition(room.getId());
         cdcInternalService.create(new CdcCreateDTO(
-                cdcInternalService.calcPartition(room.getId()),
+                partition,
                 RealtimeApiMethod.PUBLISH,
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
         MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(newMessage, room);
+
+        log.info(
+                "Message created: memberSubject={}, roomId={}, messageId={}, parentId={}, roomVersion={}",
+                currentMember.subject(),
+                room.getId(),
+                newMessage.getId(),
+                newMessage.getParent() != null ? newMessage.getParent().getId() : null,
+                room.getVersion()
+        );
+
+        log.debug(
+                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                room.getId(),
+                newMessage.getId(),
+                partition,
+                publishDTO.channel(),
+                ChatEvent.MESSAGE_ADDED
+        );
+
         afterCommitExecutor.run(metricService::markMessageCreated);
         return response;
     }
@@ -100,13 +122,32 @@ public class MessageFacade {
                 ))
                 .build();
 
+        long partition = cdcInternalService.calcPartition(room.getId());
         cdcInternalService.create(new CdcCreateDTO(
-                cdcInternalService.calcPartition(room.getId()),
+                partition,
                 RealtimeApiMethod.PUBLISH,
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
         MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(updatedMessage, room);
+
+        log.info(
+                "Message updated: memberSubject={}, roomId={}, messageId={}, roomVersion={}",
+                currentMember.subject(),
+                room.getId(),
+                updatedMessage.getId(),
+                room.getVersion()
+        );
+
+        log.debug(
+                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                room.getId(),
+                updatedMessage.getId(),
+                partition,
+                publishDTO.channel(),
+                ChatEvent.MESSAGE_UPDATED
+        );
+
         afterCommitExecutor.run(metricService::markMessageUpdated);
         return response;
     }
@@ -138,13 +179,33 @@ public class MessageFacade {
                 ))
                 .build();
 
+        long partition = cdcInternalService.calcPartition(room.getId());
         cdcInternalService.create(new CdcCreateDTO(
-                cdcInternalService.calcPartition(room.getId()),
+                partition,
                 RealtimeApiMethod.PUBLISH,
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
         MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(deletedMessage, room);
+
+        log.info(
+                "Message deleted: memberSubject={}, roomId={}, messageId={}, newLastMessageId={}, roomVersion={}",
+                currentMember.subject(),
+                room.getId(),
+                deletedMessage.getId(),
+                room.getLastMessage() != null ? room.getLastMessage().getId() : null,
+                room.getVersion()
+        );
+
+        log.debug(
+                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                room.getId(),
+                deletedMessage.getId(),
+                partition,
+                publishDTO.channel(),
+                ChatEvent.MESSAGE_DELETED
+        );
+
         afterCommitExecutor.run(metricService::markMessageDeleted);
         return response;
     }

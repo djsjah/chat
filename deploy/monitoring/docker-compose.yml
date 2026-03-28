@@ -3,17 +3,44 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--config.file=/etc/prometheus/config.yml"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/config.yml:/etc/prometheus/config.yml:ro
     ports:
       - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command:
+      - "-config.file=/etc/loki/config.yml"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    command:
+      - "run"
+      - "/etc/alloy/config.alloy"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../logs:/var/log/chat:ro
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     depends_on:
       - prometheus
+      - loki
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -25,3 +52,4 @@ services:
 
 volumes:
   grafana_data:
+  loki_data:

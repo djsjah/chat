@@ -25,9 +25,8 @@ public class Cdc {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(nullable = false, updatable = false, columnDefinition = "realtime_server_api_method")
+    @Column(nullable = false, updatable = false)
+    @Convert(converter = RealtimeApiMethodConverter.class)
     private RealtimeApiMethod method = RealtimeApiMethod.PUBLISH;
 
     @JdbcTypeCode(SqlTypes.JSON)

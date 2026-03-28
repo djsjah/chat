@@ -4,11 +4,14 @@
 - Java
 - Spring
 - JPA
+- Gradle
 - Liquibase
 - PostgreSQL
 - Keycloak
 - Prometheus
 - Grafana
+- Grafana Loki
+- Grafana Alloy
 - Centrifugo
 
 ## Дисциплина
@@ -98,9 +101,12 @@ OpenAPI-спецификация находится по пути:
 
 Файлы для поднятия инфраструктуры мониторинга и аутентификации находятся в каталоге `deploy`:
 
-- `deploy/monitoring/docker-compose.yml` — Prometheus и Grafana
-- `deploy/monitoring/prometheus/prometheus.yml` — конфигурация Prometheus
+- `deploy/monitoring/docker-compose.yml` — Prometheus, Grafana, Loki и Alloy
+- `deploy/monitoring/prometheus/config.yml` — конфигурация Prometheus
 - `deploy/monitoring/provisioning/datasources/prometheus.yml` — автоматическое подключение Grafana к Prometheus
+- `deploy/monitoring/provisioning/datasources/loki.yml` — datasource Loki для Grafana
+- `deploy/monitoring/loki/config.yml` — конфигурация Grafana Loki
+- `deploy/monitoring/alloy/config.alloy` — конфигурация агента сбора логов и экспорта в Loki
 - `deploy/keycloak/docker-compose.yml` — Keycloak, MailHog и PostgreSQL для Keycloak
 - `deploy/keycloak/import/chat-realm.json` — импорт realm для Keycloak
 
@@ -109,8 +115,8 @@ OpenAPI-спецификация находится по пути:
 #### CDC / Outbox
 
 - `src/main/java/com/chat/cdc/service/CdcMetricService` — регистрация CDC-метрик
-- `src/main/java/com/chat/cdcCdcMetricBinder` — периодическое обновление gauge-метрик по таблице `cdc`
-- `src/main/java/com/chat/service/CdcInternalService` — использование CDC-метрик при создании outbox-записей
+- `src/main/java/com/chat/cdc/CdcMetricBinder` — периодическое обновление gauge-метрик по таблице `cdc`
+- `src/main/java/com/chat/cdc/service/CdcInternalService` — использование CDC-метрик при создании outbox-записей
 
 #### Realtime
 
@@ -119,7 +125,7 @@ OpenAPI-спецификация находится по пути:
 
 #### Chat domain
 
-- `src/main/java/com/chat/app/metric/ChatMetricService` — регистрация продуктовых метрик домена чата
+- `src/main/java/com/chat/app/service/ChatMetricService` — регистрация продуктовых метрик домена чата
 - `src/main/java/com/chat/core/message/service/MessageFacade` — использование метрик создания, обновления и удаления сообщений
 - `src/main/java/com/chat/core/member/MemberService` — использование метрики создания участника
 - `src/main/java/com/chat/core/admin/member/AdminMemberService` — использование метрики удаления участника
@@ -131,6 +137,103 @@ OpenAPI-спецификация находится по пути:
 Приложение экспортирует метрики по адресу:
 
 `/actuator/prometheus`
+
+### Логи
+
+Для сбора, хранения и анализа логов приложения используются **Grafana Alloy**, **Grafana Loki** и **Grafana**.
+
+Приложение Spring Boot записывает логи в файл:
+
+`logs/chat-service.log`
+
+Агент **Grafana Alloy** считывает этот файл и отправляет лог-записи в **Grafana Loki**.  
+Просмотр и анализ логов выполняется в **Grafana** через datasource `Loki`.
+
+В качестве языка запросов используется **LogQL** — встроенный язык запросов Loki, доступный в datasource Grafana Loki.
+
+### Прикладные логи
+
+- `Message created` — `INFO`  
+  Успешное создание сообщения в комнате.
+
+- `Message updated` — `INFO`  
+  Успешное обновление сообщения.
+
+- `Message deleted` — `INFO`  
+  Успешное удаление сообщения.
+
+- `Member created` — `INFO`  
+  Успешное создание участника чата.
+
+- `Member soft-deleted by admin` — `INFO`  
+  Пометка участника как удаленного администратором.
+
+- `Room created by admin` — `INFO`  
+  Успешное создание комнаты администратором.
+
+- `Member joined room by admin` — `INFO`  
+  Успешное добавление участника в комнату администратором.
+
+- `Member removed from room by admin` — `INFO`  
+  Успешное удаление участника из комнаты администратором.
+
+- `Realtime connection token generated` — `INFO`  
+  Успешная генерация `connection token` для Realtime-сервера.
+
+- `Realtime subscription token generated` — `INFO`  
+  Успешная генерация `subscription token` для подписки на канал комнаты.
+
+### Технические логи
+
+- `Realtime outbox saved` — `DEBUG`  
+  Успешная запись realtime / outbox события в таблицу `cdc`.
+
+### Предупреждающие логи
+
+- `Realtime subscription token generation failed` — `WARN`  
+  Ошибка генерации `subscription token`, например если комната недоступна участнику.
+
+- `After-commit action executed immediately because no active transaction was found` — `WARN`  
+  Выполнение `afterCommit`-действия вне активной транзакции.
+
+- `CDC backlog detected` — `WARN`  
+  Обнаружено накопление необработанных записей в таблице `cdc`.
+
+### Информационные служебные логи
+
+- `CDC backlog normalized` — `INFO`  
+  Состояние backlog в таблице `cdc` вернулось к нормальному.
+
+- `CDC backlog cleared` — `INFO`  
+  Таблица `cdc` очищена, необработанные записи отсутствуют.
+
+### Где реализованы логи
+
+#### Chat domain
+
+- `src/main/java/com/chat/core/message/service/MessageFacade` — логи создания, обновления и удаления сообщений, а также технические `DEBUG`-логи записи realtime / outbox события
+- `src/main/java/com/chat/core/member/MemberService` — лог создания участника
+- `src/main/java/com/chat/core/admin/member/AdminMemberService` — лог soft-delete участника администратором
+- `src/main/java/com/chat/core/admin/room/service/AdminRoomService` — лог создания комнаты
+- `src/main/java/com/chat/core/admin/room/service/AdminRoomMemberFacade` — логи добавления и удаления участника из комнаты, а также технические `DEBUG`-логи записи realtime / outbox события
+
+#### Realtime
+
+- `src/main/java/com/chat/infrastructure/realtime/service/RealtimeService` — логи генерации токенов подключения и подписки на канал комнаты чата, а также предупреждающие логи ошибок подписки
+
+#### CDC
+
+- `src/main/java/com/chat/cdc/CdcMetricBinder` — логи обнаружения, нормализации и очистки backlog в таблице `cdc`
+
+#### App
+
+- `src/main/java/com/chat/app/AfterCommitExecutor` — предупреждающий лог выполнения `afterCommit`-действия вне активной транзакции
+
+#### Примечания
+
+- `INFO` используется для значимых бизнес-событий.
+- `DEBUG` используется для технических деталей realtime / outbox интеграции.
+- `WARN` используется для аномальных или подозрительных ситуаций.
 
 ### Скриншоты для лабораторной работы 2
 
@@ -156,3 +259,9 @@ OpenAPI-спецификация находится по пути:
 ![Скриншот 18](docs/18.png)
 ![Скриншот 19](docs/19.png)
 ![Скриншот 20](docs/20.png)
+
+### Скриншоты для лабораторной работы 4
+![Скриншот 21](docs/21.png)
+![Скриншот 22](docs/22.png)
+![Скриншот 23](docs/23.png)
+![Скриншот 24](docs/24.png)

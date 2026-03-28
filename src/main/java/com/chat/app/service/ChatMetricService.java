@@ -1,4 +1,4 @@
-package com.chat.app.metric;
+package com.chat.app.service;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;

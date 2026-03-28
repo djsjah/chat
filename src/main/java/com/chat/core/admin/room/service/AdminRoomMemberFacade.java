@@ -4,12 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.chat.app.AfterCommitExecutor;
 import com.chat.app.event.ChatEvent;
-import com.chat.app.metric.ChatMetricService;
+import com.chat.app.service.ChatMetricService;
 import com.chat.cdc.dto.CdcCreateDTO;
 import com.chat.cdc.service.CdcInternalService;
 import com.chat.core.admin.room.AdminRoomMapper;
@@ -25,6 +26,7 @@ import com.chat.persistence.room.Room;
 import com.chat.persistence.room.RoomMember;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class AdminRoomMemberFacade {
     private final ObjectMapper objectMapper;
@@ -40,7 +42,7 @@ public class AdminRoomMemberFacade {
 
     @Transactional
     public AdminRoomWithMemberDTO joinMemberToRoom(Long memberId, Long roomId) {
-        Room room = roomInternalService.getAccessibleByIdForUpdate(roomId, memberId);
+        Room room = roomInternalService.getOneByIdForUpdate(roomId);
         RoomMember roomMember = roomMemberInternalService.create(memberId, room);
         room.setVersion(room.getVersion() + 1);
 
@@ -57,13 +59,32 @@ public class AdminRoomMemberFacade {
                 .idempotencyKey(RealtimeUtils.generateIdempotencyKey(ChatEvent.USER_JOINED, roomMember.getId()))
                 .build();
 
+        long partition = cdcInternalService.calcPartition(room.getId());
         cdcInternalService.create(new CdcCreateDTO(
-                cdcInternalService.calcPartition(room.getId()),
+                partition,
                 RealtimeApiMethod.PUBLISH,
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
         AdminRoomWithMemberDTO response = roomMapper.toResponseWithMemberDTO(room, roomMember.getMember());
+
+        log.info(
+                "Member joined room by admin: memberId={}, roomId={}, roomMemberId={}, roomVersion={}",
+                roomMember.getMember().getId(),
+                room.getId(),
+                roomMember.getId(),
+                room.getVersion()
+        );
+
+        log.debug(
+                "Realtime outbox saved: roomId={}, memberId={}, partition={}, channel={}, event={}",
+                room.getId(),
+                roomMember.getMember().getId(),
+                partition,
+                publishDTO.channel(),
+                ChatEvent.USER_JOINED
+        );
+
         afterCommitExecutor.run(metricService::markMemberJoined);
         return response;
     }
@@ -87,13 +108,32 @@ public class AdminRoomMemberFacade {
                 .idempotencyKey(RealtimeUtils.generateIdempotencyKey(ChatEvent.USER_LEFT, roomMember.getId()))
                 .build();
 
+        long partition = cdcInternalService.calcPartition(room.getId());
         cdcInternalService.create(new CdcCreateDTO(
-                cdcInternalService.calcPartition(room.getId()),
+                partition,
                 RealtimeApiMethod.PUBLISH,
                 objectMapper.convertValue(publishDTO, JsonNode.class)
         ));
 
         AdminRoomResponseDTO response = roomMapper.toResponseDTO(room);
+
+        log.info(
+                "Member removed from room by admin: memberId={}, roomId={}, roomMemberId={}, roomVersion={}",
+                roomMember.getMember().getId(),
+                room.getId(),
+                roomMember.getId(),
+                room.getVersion()
+        );
+
+        log.debug(
+                "Realtime outbox saved: roomId={}, memberId={}, partition={}, channel={}, event={}",
+                room.getId(),
+                roomMember.getMember().getId(),
+                partition,
+                publishDTO.channel(),
+                ChatEvent.USER_LEFT
+        );
+
         afterCommitExecutor.run(metricService::markMemberLeft);
         return response;
     }
