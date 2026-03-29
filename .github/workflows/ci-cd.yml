@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    name: Build, start application and validate Docker
+    name: Build, start application and validate infrastructure
     runs-on: ubuntu-latest
 
     services:
@@ -124,6 +124,19 @@ jobs:
           docker compose -f deploy/monitoring/docker-compose.yml logs
           exit 1
 
+      - name: Wait for Tempo readiness
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:3200/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Tempo failed to start"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
       - name: Wait for Grafana health
         run: |
           for i in {1..60}; do
@@ -156,6 +169,102 @@ jobs:
             docker compose -f deploy/monitoring/docker-compose.yml logs
             exit 1
           fi
+
+      - name: Verify Prometheus sees chat-service target
+        run: |
+          for i in {1..60}; do
+            RESPONSE=$(curl -fsS --get \
+              --data-urlencode 'query=up{job="chat-service"}' \
+              http://localhost:9090/api/v1/query)
+
+            echo "$RESPONSE"
+
+            python - <<'PY' "$RESPONSE"
+import json, sys
+data = json.loads(sys.argv[1])
+result = data.get("data", {}).get("result", [])
+ok = any(item.get("value", [None, "0"])[1] == "1" for item in result)
+raise SystemExit(0 if ok else 1)
+PY
+            if [ $? -eq 0 ]; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Prometheus did not report chat-service as UP"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
+      - name: Verify Loki ingests application logs
+        run: |
+          for i in {1..60}; do
+            RESPONSE=$(curl -fsS --get \
+              --data-urlencode 'query={job="chat-service-file"}' \
+              --data-urlencode 'limit=1' \
+              http://localhost:3100/loki/api/v1/query)
+
+            echo "$RESPONSE"
+
+            python - <<'PY' "$RESPONSE"
+import json, sys
+data = json.loads(sys.argv[1])
+result = data.get("data", {}).get("result", [])
+raise SystemExit(0 if result else 1)
+PY
+            if [ $? -eq 0 ]; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Loki did not ingest chat-service logs"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
+      - name: Trigger trace candidate via actuator health
+        run: |
+          for i in {1..10}; do
+            if curl -fsS http://localhost:3000/actuator/health > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Could not trigger actuator health request"
+          exit 1
+
+      - name: Verify Tempo sees chat-service traces
+        run: |
+          for i in {1..60}; do
+            RESPONSE=$(curl -fsS --get \
+              --data-urlencode 'tags=service.name=chat-service' \
+              http://localhost:3200/api/search)
+
+            echo "$RESPONSE"
+
+            python - <<'PY' "$RESPONSE"
+import json, sys
+data = json.loads(sys.argv[1])
+traces = data.get("traces", [])
+raise SystemExit(0 if traces else 1)
+PY
+            if [ $? -eq 0 ]; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Tempo did not return traces for service.name=chat-service"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          echo "Application log tail:"
+          tail -n 200 app.log || true
+          exit 1
 
       - name: Stop Monitoring stack
         if: always()
