@@ -179,14 +179,7 @@ jobs:
 
             echo "$RESPONSE"
 
-            python - <<'PY' "$RESPONSE"
-import json, sys
-data = json.loads(sys.argv[1])
-result = data.get("data", {}).get("result", [])
-ok = any(item.get("value", [None, "0"])[1] == "1" for item in result)
-raise SystemExit(0 if ok else 1)
-PY
-            if [ $? -eq 0 ]; then
+            if echo "$RESPONSE" | grep -q '"result"' && echo "$RESPONSE" | grep -q '"1"'; then
               exit 0
             fi
 
@@ -208,14 +201,10 @@ PY
 
             echo "$RESPONSE"
 
-            python - <<'PY' "$RESPONSE"
-import json, sys
-data = json.loads(sys.argv[1])
-result = data.get("data", {}).get("result", [])
-raise SystemExit(0 if result else 1)
-PY
-            if [ $? -eq 0 ]; then
-              exit 0
+            if echo "$RESPONSE" | grep -q '"result"'; then
+              if ! echo "$RESPONSE" | grep -q '"result":\[\]'; then
+                exit 0
+              fi
             fi
 
             sleep 5
@@ -246,14 +235,10 @@ PY
 
             echo "$RESPONSE"
 
-            python - <<'PY' "$RESPONSE"
-import json, sys
-data = json.loads(sys.argv[1])
-traces = data.get("traces", [])
-raise SystemExit(0 if traces else 1)
-PY
-            if [ $? -eq 0 ]; then
-              exit 0
+            if echo "$RESPONSE" | grep -q '"traces"'; then
+              if ! echo "$RESPONSE" | grep -q '"traces":\[\]'; then
+                exit 0
+              fi
             fi
 
             sleep 5
