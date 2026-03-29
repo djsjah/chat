@@ -30,6 +30,23 @@ OpenAPI-спецификация находится по пути:
 
 `src/main/resources/static/openapi.yml`
 
+## Monitoring и инфраструктура
+
+### Docker Compose
+
+Файлы для поднятия инфраструктуры мониторинга и аутентификации находятся в каталоге `deploy`:
+
+- `deploy/monitoring/docker-compose.yml` — Prometheus, Grafana, Loki, Tempo и Alloy
+- `deploy/monitoring/prometheus/config.yml` — конфигурация Prometheus
+- `deploy/monitoring/provisioning/datasources/prometheus.yml` — datasource Prometheus для Grafana
+- `deploy/monitoring/provisioning/datasources/loki.yml` — datasource Loki для Grafana
+- `deploy/monitoring/provisioning/datasources/tempo.yml` — datasource Tempo для Grafana
+- `deploy/monitoring/loki/config.yml` — конфигурация Grafana Loki
+- `deploy/monitoring/tempo/config.yml` — конфигурация Grafana Tempo
+- `deploy/monitoring/alloy/config.alloy` — конфигурация агента сбора логов и экспорта в Loki
+- `deploy/keycloak/docker-compose.yml` — Keycloak, MailHog и PostgreSQL для Keycloak
+- `deploy/keycloak/import/chat-realm.json` — импорт realm для Keycloak
+
 ## Метрики
 
 Приложение публикует стандартные технические метрики Spring Boot Actuator / Micrometer и кастомные продуктовые метрики через endpoint:
@@ -97,23 +114,6 @@ OpenAPI-спецификация находится по пути:
 - Счетчики сообщений, участников, комнат и CDC-записей увеличиваются только после успешного коммита транзакции.
 - Технические метрики HTTP, JVM, datasource, process и Spring Security публикуются автоматически через Spring Boot Actuator и Micrometer.
 
-## Monitoring и инфраструктура
-
-### Docker Compose
-
-Файлы для поднятия инфраструктуры мониторинга и аутентификации находятся в каталоге `deploy`:
-
-- `deploy/monitoring/docker-compose.yml` — Prometheus, Grafana, Loki, Tempo и Alloy
-- `deploy/monitoring/prometheus/config.yml` — конфигурация Prometheus
-- `deploy/monitoring/provisioning/datasources/prometheus.yml` — datasource Prometheus для Grafana
-- `deploy/monitoring/provisioning/datasources/loki.yml` — datasource Loki для Grafana
-- `deploy/monitoring/provisioning/datasources/tempo.yml` — datasource Tempo для Grafana
-- `deploy/monitoring/loki/config.yml` — конфигурация Grafana Loki
-- `deploy/monitoring/tempo/config.yml` — конфигурация Grafana Tempo
-- `deploy/monitoring/alloy/config.alloy` — конфигурация агента сбора логов и экспорта в Loki
-- `deploy/keycloak/docker-compose.yml` — Keycloak, MailHog и PostgreSQL для Keycloak
-- `deploy/keycloak/import/chat-realm.json` — импорт realm для Keycloak
-
 ### Где реализованы кастомные метрики
 
 #### CDC / Outbox
@@ -142,7 +142,7 @@ OpenAPI-спецификация находится по пути:
 
 `/actuator/prometheus`
 
-### Логи
+## Логи
 
 Для сбора, хранения и анализа логов приложения используются **Grafana Alloy**, **Grafana Loki** и **Grafana**.
 
@@ -357,7 +357,7 @@ OpenAPI-спецификация находится по пути:
 - Для корреляции логов и трейсов в шаблон логирования добавлены `traceId` и `spanId`.
 - Метрики из трейсов и service graph не настраивались; в рамках проекта реализованы генерация, экспорт, сбор, просмотр и TraceQL-запросы по трейсам.
 
-### Скриншоты для лабораторной работы 2
+## Скриншоты для лабораторной работы 2
 
 ![Скриншот 1](docs/1.png)
 ![Скриншот 2](docs/2.png)
@@ -366,7 +366,7 @@ OpenAPI-спецификация находится по пути:
 ![Скриншот 5](docs/5.png)
 ![Скриншот 6](docs/6.png)
 
-### Скриншоты для лабораторной работы 3
+## Скриншоты для лабораторной работы 3
 ![Скриншот 7](docs/7.png)
 ![Скриншот 8](docs/8.png)
 ![Скриншот 9](docs/9.png)
@@ -382,13 +382,13 @@ OpenAPI-спецификация находится по пути:
 ![Скриншот 19](docs/19.png)
 ![Скриншот 20](docs/20.png)
 
-### Скриншоты для лабораторной работы 4
+## Скриншоты для лабораторной работы 4
 ![Скриншот 21](docs/21.png)
 ![Скриншот 22](docs/22.png)
 ![Скриншот 23](docs/23.png)
 ![Скриншот 24](docs/24.png)
 
-### Скриншоты для лабораторной работы 5
+## Скриншоты для лабораторной работы 5
 ![Скриншот 25](docs/25.png)
 ![Скриншот 26](docs/26.png)
 ![Скриншот 27](docs/27.png)
