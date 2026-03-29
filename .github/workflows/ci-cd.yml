@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    name: Build and start application
+    name: Build, start application and validate Docker
     runs-on: ubuntu-latest
 
     services:
@@ -61,7 +61,7 @@ jobs:
           nohup java -jar "$JAR_FILE" > app.log 2>&1 &
           echo $! > app.pid
 
-      - name: Wait for health endpoint
+      - name: Wait for application health endpoint
         run: |
           for i in {1..60}; do
             if curl -fsS http://localhost:3000/actuator/health; then
@@ -72,6 +72,98 @@ jobs:
           echo "Application failed to start"
           cat app.log
           exit 1
+
+      - name: Validate Keycloak docker-compose
+        run: docker compose -f deploy/keycloak/docker-compose.yml config
+
+      - name: Validate Monitoring docker-compose
+        run: docker compose -f deploy/monitoring/docker-compose.yml config
+
+      - name: Start Keycloak stack
+        run: docker compose -f deploy/keycloak/docker-compose.yml up -d
+
+      - name: Wait for Keycloak realm endpoint
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8081/realms/chat > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Keycloak failed to start"
+          docker compose -f deploy/keycloak/docker-compose.yml ps
+          docker compose -f deploy/keycloak/docker-compose.yml logs
+          exit 1
+
+      - name: Start Monitoring stack
+        run: docker compose -f deploy/monitoring/docker-compose.yml up -d
+
+      - name: Wait for Prometheus readiness
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:9090/-/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Prometheus failed to start"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
+      - name: Wait for Loki readiness
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:3100/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Loki failed to start"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
+      - name: Wait for Grafana health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:3001/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Grafana failed to start"
+          docker compose -f deploy/monitoring/docker-compose.yml ps
+          docker compose -f deploy/monitoring/docker-compose.yml logs
+          exit 1
+
+      - name: Verify Alloy container is running
+        run: |
+          CONTAINER_ID=$(docker compose -f deploy/monitoring/docker-compose.yml ps -q alloy)
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Alloy container was not created"
+            docker compose -f deploy/monitoring/docker-compose.yml ps
+            docker compose -f deploy/monitoring/docker-compose.yml logs
+            exit 1
+          fi
+
+          STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID")
+          echo "Alloy status: $STATUS"
+
+          if [ "$STATUS" != "running" ]; then
+            echo "Alloy container is not running"
+            docker compose -f deploy/monitoring/docker-compose.yml ps
+            docker compose -f deploy/monitoring/docker-compose.yml logs
+            exit 1
+          fi
+
+      - name: Stop Monitoring stack
+        if: always()
+        run: docker compose -f deploy/monitoring/docker-compose.yml down -v
+
+      - name: Stop Keycloak stack
+        if: always()
+        run: docker compose -f deploy/keycloak/docker-compose.yml down -v
 
       - name: Stop application
         if: always()
