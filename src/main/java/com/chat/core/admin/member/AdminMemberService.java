@@ -1,5 +1,7 @@
 package com.chat.core.admin.member;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,25 +18,35 @@ import com.chat.persistence.member.repository.AdminMemberRepository;
 @Slf4j
 @RequiredArgsConstructor
 public class AdminMemberService {
+    private final ObservationRegistry observationRegistry;
     private final AfterCommitExecutor afterCommitExecutor;
     private final ChatMetricService chatMetricService;
     private final AdminMemberRepository memberRepository;
 
     @Transactional
     public void deleteOneById(Long id) {
-        Member member = memberRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested member not found"));
+        Observation.createNotStarted("chat.admin.member.delete", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "soft-delete")
+                .lowCardinalityKeyValue("member.id", String.valueOf(id))
 
-        member.setDeleted(true);
-        memberRepository.save(member);
+                .observe(() -> {
+                    Member member = memberRepository.findById(id)
+                            .orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.NOT_FOUND,
+                                    "Requested member not found"
+                            ));
 
-        log.info(
-                "Member soft-deleted by admin: memberId={}, memberSubject={}, memberName={}",
-                member.getId(),
-                member.getSubject(),
-                member.getName()
-        );
+                    member.setDeleted(true);
+                    memberRepository.save(member);
 
-        afterCommitExecutor.run(chatMetricService::markMemberDeleted);
+                    log.info(
+                            "Member soft-deleted by admin: memberId={}, memberSubject={}, memberName={}",
+                            member.getId(),
+                            member.getSubject(),
+                            member.getName()
+                    );
+
+                    afterCommitExecutor.run(chatMetricService::markMemberDeleted);
+                });
     }
 }

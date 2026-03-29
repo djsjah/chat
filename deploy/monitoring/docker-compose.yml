@@ -22,6 +22,18 @@ services:
     ports:
       - "3100:3100"
 
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: tempo
+    command:
+      - "-config.file=/etc/tempo/config.yml"
+    volumes:
+      - ./tempo/config.yml:/etc/tempo/config.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4318:4318"
+
   alloy:
     image: grafana/alloy:latest
     container_name: alloy
@@ -41,6 +53,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -53,3 +66,4 @@ services:
 volumes:
   grafana_data:
   loki_data:
+  tempo_data:

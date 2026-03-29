@@ -12,6 +12,8 @@
 - Grafana
 - Grafana Loki
 - Grafana Alloy
+- Grafana Tempo
+- OpenTelemetry
 - Centrifugo
 
 ## Дисциплина
@@ -101,11 +103,13 @@ OpenAPI-спецификация находится по пути:
 
 Файлы для поднятия инфраструктуры мониторинга и аутентификации находятся в каталоге `deploy`:
 
-- `deploy/monitoring/docker-compose.yml` — Prometheus, Grafana, Loki и Alloy
+- `deploy/monitoring/docker-compose.yml` — Prometheus, Grafana, Loki, Tempo и Alloy
 - `deploy/monitoring/prometheus/config.yml` — конфигурация Prometheus
-- `deploy/monitoring/provisioning/datasources/prometheus.yml` — автоматическое подключение Grafana к Prometheus
+- `deploy/monitoring/provisioning/datasources/prometheus.yml` — datasource Prometheus для Grafana
 - `deploy/monitoring/provisioning/datasources/loki.yml` — datasource Loki для Grafana
+- `deploy/monitoring/provisioning/datasources/tempo.yml` — datasource Tempo для Grafana
 - `deploy/monitoring/loki/config.yml` — конфигурация Grafana Loki
+- `deploy/monitoring/tempo/config.yml` — конфигурация Grafana Tempo
 - `deploy/monitoring/alloy/config.alloy` — конфигурация агента сбора логов и экспорта в Loki
 - `deploy/keycloak/docker-compose.yml` — Keycloak, MailHog и PostgreSQL для Keycloak
 - `deploy/keycloak/import/chat-realm.json` — импорт realm для Keycloak
@@ -188,24 +192,22 @@ OpenAPI-спецификация находится по пути:
 - `Realtime outbox saved` — `DEBUG`  
   Успешная запись realtime / outbox события в таблицу `cdc`.
 
+- `CDC backlog normalized` — `INFO`  
+  Состояние backlog в таблице `cdc` вернулось к нормальному.
+
+- `CDC backlog cleared` — `INFO`  
+  Таблица `cdc` очищена, необработанные записи отсутствуют.
+
 ### Предупреждающие логи
 
 - `Realtime subscription token generation failed` — `WARN`  
-  Ошибка генерации `subscription token`, например если комната недоступна участнику.
+  Ошибка генерации `subscription token`, если комната недоступна участнику.
 
 - `After-commit action executed immediately because no active transaction was found` — `WARN`  
   Выполнение `afterCommit`-действия вне активной транзакции.
 
 - `CDC backlog detected` — `WARN`  
   Обнаружено накопление необработанных записей в таблице `cdc`.
-
-### Информационные служебные логи
-
-- `CDC backlog normalized` — `INFO`  
-  Состояние backlog в таблице `cdc` вернулось к нормальному.
-
-- `CDC backlog cleared` — `INFO`  
-  Таблица `cdc` очищена, необработанные записи отсутствуют.
 
 ### Где реализованы логи
 
@@ -234,6 +236,126 @@ OpenAPI-спецификация находится по пути:
 - `INFO` используется для значимых бизнес-событий.
 - `DEBUG` используется для технических деталей realtime / outbox интеграции.
 - `WARN` используется для аномальных или подозрительных ситуаций.
+
+## Трейсы
+
+Приложение экспортирует distributed traces по протоколу OTLP.  
+Для хранения и поиска трейсов используется **Grafana Tempo**, для просмотра — **Grafana**.
+
+Экспорт трейсов выполняется напрямую из Spring Boot-приложения в Tempo.
+
+### Что трассируется
+
+Приложение публикует стандартные HTTP server traces Spring Boot / Micrometer Tracing, а также кастомные прикладные spans для ключевых бизнес-операций.
+
+### Кастомные spans
+
+#### Chat domain traces
+
+- `chat.message.create`  
+  Создание сообщения в комнате.
+
+- `chat.message.patch`  
+  Обновление сообщения.
+
+- `chat.message.delete`  
+  Удаление сообщения.
+
+- `chat.member.create`  
+  Создание участника чата.
+
+#### CDC / Outbox traces
+
+- `chat.cdc.create`  
+  Создание записи в таблице `cdc` в рамках outbox / realtime-интеграции.
+
+#### Realtime traces
+
+- `chat.realtime.connection-token.generate`  
+  Генерация токена подключения к комнате Realtime-сервера.
+
+- `chat.realtime.subscription-token.generate`  
+  Генерация токена подписки на канал комнаты.
+
+#### Admin traces
+
+- `chat.admin.member.delete`  
+  Soft-delete участника администратором.
+
+- `chat.admin.room.create`  
+  Создание комнаты администратором.
+
+- `chat.admin.room.member.join`  
+  Добавление участника в комнату администратором.
+
+- `chat.admin.room.member.remove`  
+  Удаление участника из комнаты администратором.
+
+#### Internal traces
+
+- `chat.room.resolve-for-update`  
+  Получение комнаты с блокировкой для операций изменения.
+
+- `chat.admin.room.resolve-for-update`  
+  Получение комнаты с блокировкой для административных операций.
+
+### Атрибуты spans
+
+Для прикладных spans используются low-cardinality атрибуты, например:
+
+- `chat.operation`
+- `chat.event`
+- `room.id`
+- `message.id`
+- `member.id`
+- `resolve.by`
+- `cdc.method`
+- `cdc.partition`
+
+### Где реализованы трейсы
+
+#### Chat domain
+
+- `src/main/java/com/chat/core/message/service/MessageFacade` — прикладные spans создания, обновления и удаления сообщений
+- `src/main/java/com/chat/core/member/MemberService` — span создания участника
+
+#### Realtime
+
+- `src/main/java/com/chat/infrastructure/realtime/service/RealtimeService` — spans генерации токена подписки и токена подключения
+
+#### CDC / Outbox
+
+- `src/main/java/com/chat/cdc/service/CdcInternalService` — span создания записи в таблице `cdc`
+
+#### Admin
+
+- `src/main/java/com/chat/core/admin/member/AdminMemberService` — span soft-delete участника
+- `src/main/java/com/chat/core/admin/room/service/AdminRoomService` — span создания комнаты
+- `src/main/java/com/chat/core/admin/room/service/AdminRoomMemberFacade` — spans добавления и удаления участника из комнаты
+- `src/main/java/com/chat/core/admin/room/service/AdminRoomInternalService` — spans получения комнаты с блокировкой для административных операций
+
+#### Internal
+
+- `src/main/java/com/chat/core/room/service/RoomInternalService` — spans получения комнаты с блокировкой для операций изменения
+
+### Экспорт трейсов
+
+Приложение экспортирует трейсы по OTLP в Tempo по адресу:
+
+`http://localhost:4318/v1/traces`
+
+### Просмотр трейсов
+
+Просмотр и анализ трейсов выполняется в **Grafana** через datasource `Tempo`.
+
+В качестве языка запросов используется **TraceQL** — встроенный язык запросов Tempo, доступный в datasource Grafana Tempo.
+
+### Примечания
+
+- Трейсы создаются для HTTP-запросов автоматически через Spring Boot Actuator / Micrometer Tracing.
+- Прикладные spans добавлены вручную через `ObservationRegistry` и `Observation`.
+- Для корреляции логов и трейсов в шаблон логирования добавлены `traceId` и `spanId`.
+- Метрики из трейсов и service graph не настраивались; в рамках проекта реализованы генерация, экспорт, сбор, просмотр и TraceQL-запросы по трейсам.
 
 ### Скриншоты для лабораторной работы 2
 
@@ -265,3 +387,13 @@ OpenAPI-спецификация находится по пути:
 ![Скриншот 22](docs/22.png)
 ![Скриншот 23](docs/23.png)
 ![Скриншот 24](docs/24.png)
+
+### Скриншоты для лабораторной работы 5
+![Скриншот 25](docs/25.png)
+![Скриншот 26](docs/26.png)
+![Скриншот 27](docs/27.png)
+![Скриншот 28](docs/28.png)
+![Скриншот 29](docs/29.png)
+![Скриншот 30](docs/30.png)
+![Скриншот 31](docs/31.png)
+![Скриншот 32](docs/32.png)

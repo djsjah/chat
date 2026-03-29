@@ -2,6 +2,8 @@ package com.chat.core.message.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ import com.chat.security.CurrentMemberProvider;
 @RequiredArgsConstructor
 public class MessageFacade {
     private final ObjectMapper objectMapper;
+    private final ObservationRegistry observationRegistry;
     private final CurrentMemberProvider currentMember;
     private final AfterCommitExecutor afterCommitExecutor;
     private final ChatMetricService metricService;
@@ -48,165 +51,206 @@ public class MessageFacade {
 
     @Transactional
     public MessageWithRoomDTO createMessage(Long roomId, MessageCreateDTO createDTO) {
-        Room room = roomInternalService.getAccessibleByIdForUpdate(roomId, currentMember.subject());
-        Message newMessage = messageInternalService.create(currentMember.subject(), room, createDTO);
-        room.applyNewMessage(newMessage, OffsetDateTime.now(Clock.systemUTC()));
+        return Observation.createNotStarted("chat.message.create", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "create")
+                .lowCardinalityKeyValue("room.id", String.valueOf(roomId))
+                .lowCardinalityKeyValue("has.parent", String.valueOf(createDTO.getParentId() != null))
+                .lowCardinalityKeyValue("chat.event", "message_added")
 
-        PublishDTO publishDTO = PublishDTO.builder()
-                .channel(RealtimeUtils.generateNamespacedChannel(RealtimeChannelNamespace.ROOM, room.getId()))
-                .data(messageEventFactory.createEvent(
-                        new MessageEventPayload(
-                                currentMember.subject(),
-                                currentMember.name(),
-                                ChatEvent.MESSAGE_ADDED,
-                                newMessage,
-                                room
-                        )
-                ))
-                .idempotencyKey(RealtimeUtils.generateIdempotencyKey(ChatEvent.MESSAGE_ADDED, newMessage.getId()))
-                .build();
+                .observe(() -> {
+                    Room room = roomInternalService.getAccessibleByIdForUpdate(roomId, currentMember.subject());
+                    Message newMessage = messageInternalService.create(currentMember.subject(), room, createDTO);
+                    room.applyNewMessage(newMessage, OffsetDateTime.now(Clock.systemUTC()));
 
-        long partition = cdcInternalService.calcPartition(room.getId());
-        cdcInternalService.create(new CdcCreateDTO(
-                partition,
-                RealtimeApiMethod.PUBLISH,
-                objectMapper.convertValue(publishDTO, JsonNode.class)
-        ));
+                    PublishDTO publishDTO = PublishDTO.builder()
+                            .channel(RealtimeUtils.generateNamespacedChannel(
+                                    RealtimeChannelNamespace.ROOM,
+                                    room.getId()
+                            ))
+                            .data(messageEventFactory.createEvent(
+                                    new MessageEventPayload(
+                                            currentMember.subject(),
+                                            currentMember.name(),
+                                            ChatEvent.MESSAGE_ADDED,
+                                            newMessage,
+                                            room
+                                    )
+                            ))
+                            .idempotencyKey(RealtimeUtils.generateIdempotencyKey(
+                                    ChatEvent.MESSAGE_ADDED,
+                                    newMessage.getId())
+                            )
+                            .build();
 
-        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(newMessage, room);
+                    long partition = cdcInternalService.calcPartition(room.getId());
+                    cdcInternalService.create(new CdcCreateDTO(
+                            partition,
+                            RealtimeApiMethod.PUBLISH,
+                            objectMapper.convertValue(publishDTO, JsonNode.class)
+                    ));
 
-        log.info(
-                "Message created: memberSubject={}, roomId={}, messageId={}, parentId={}, roomVersion={}",
-                currentMember.subject(),
-                room.getId(),
-                newMessage.getId(),
-                newMessage.getParent() != null ? newMessage.getParent().getId() : null,
-                room.getVersion()
-        );
+                    MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(newMessage, room);
 
-        log.debug(
-                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
-                room.getId(),
-                newMessage.getId(),
-                partition,
-                publishDTO.channel(),
-                ChatEvent.MESSAGE_ADDED
-        );
+                    log.info(
+                            "Message created: memberSubject={}, roomId={}, messageId={}, parentId={}, roomVersion={}",
+                            currentMember.subject(),
+                            room.getId(),
+                            newMessage.getId(),
+                            newMessage.getParent() != null ? newMessage.getParent().getId() : null,
+                            room.getVersion()
+                    );
 
-        afterCommitExecutor.run(metricService::markMessageCreated);
-        return response;
+                    log.debug(
+                            "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                            room.getId(),
+                            newMessage.getId(),
+                            partition,
+                            publishDTO.channel(),
+                            ChatEvent.MESSAGE_ADDED
+                    );
+
+                    afterCommitExecutor.run(metricService::markMessageCreated);
+                    return response;
+                });
     }
 
     @Transactional
     public MessageWithRoomDTO patchMessageById(Long messageId, MessagePatchDTO patchDTO) {
-        Room room = roomInternalService.getAccessibleByMessageIdForUpdate(messageId, currentMember.subject());
-        Message updatedMessage = messageInternalService.patchOneById(messageId, currentMember.subject(), patchDTO);
+        return Observation.createNotStarted("chat.message.patch", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "patch")
+                .lowCardinalityKeyValue("message.id", String.valueOf(messageId))
+                .lowCardinalityKeyValue("chat.event", "message_updated")
 
-        room.setVersion(room.getVersion() + 1);
+                .observe(() -> {
+                    Room room = roomInternalService.getAccessibleByMessageIdForUpdate(messageId, currentMember.subject());
+                    Message updatedMessage = messageInternalService.patchOneById(
+                            messageId,
+                            currentMember.subject(),
+                            patchDTO
+                    );
 
-        PublishDTO publishDTO = PublishDTO.builder()
-                .channel(RealtimeUtils.generateNamespacedChannel(RealtimeChannelNamespace.ROOM, room.getId()))
-                .data(messageEventFactory.createEvent(
-                        new MessageEventPayload(
-                                currentMember.subject(),
-                                currentMember.name(),
-                                ChatEvent.MESSAGE_UPDATED,
-                                updatedMessage,
-                                room
-                        )
-                ))
-                .idempotencyKey(RealtimeUtils.generateIdempotencyKey(
-                        ChatEvent.MESSAGE_UPDATED,
-                        updatedMessage.getId(),
-                        updatedMessage.getUpdatedAt()
-                ))
-                .build();
+                    room.setVersion(room.getVersion() + 1);
 
-        long partition = cdcInternalService.calcPartition(room.getId());
-        cdcInternalService.create(new CdcCreateDTO(
-                partition,
-                RealtimeApiMethod.PUBLISH,
-                objectMapper.convertValue(publishDTO, JsonNode.class)
-        ));
+                    PublishDTO publishDTO = PublishDTO.builder()
+                            .channel(RealtimeUtils.generateNamespacedChannel(
+                                    RealtimeChannelNamespace.ROOM,
+                                    room.getId()
+                            ))
+                            .data(messageEventFactory.createEvent(
+                                    new MessageEventPayload(
+                                            currentMember.subject(),
+                                            currentMember.name(),
+                                            ChatEvent.MESSAGE_UPDATED,
+                                            updatedMessage,
+                                            room
+                                    )
+                            ))
+                            .idempotencyKey(RealtimeUtils.generateIdempotencyKey(
+                                    ChatEvent.MESSAGE_UPDATED,
+                                    updatedMessage.getId(),
+                                    updatedMessage.getUpdatedAt()
+                            ))
+                            .build();
 
-        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(updatedMessage, room);
+                    long partition = cdcInternalService.calcPartition(room.getId());
+                    cdcInternalService.create(new CdcCreateDTO(
+                            partition,
+                            RealtimeApiMethod.PUBLISH,
+                            objectMapper.convertValue(publishDTO, JsonNode.class)
+                    ));
 
-        log.info(
-                "Message updated: memberSubject={}, roomId={}, messageId={}, roomVersion={}",
-                currentMember.subject(),
-                room.getId(),
-                updatedMessage.getId(),
-                room.getVersion()
-        );
+                    MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(updatedMessage, room);
 
-        log.debug(
-                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
-                room.getId(),
-                updatedMessage.getId(),
-                partition,
-                publishDTO.channel(),
-                ChatEvent.MESSAGE_UPDATED
-        );
+                    log.info(
+                            "Message updated: memberSubject={}, roomId={}, messageId={}, roomVersion={}",
+                            currentMember.subject(),
+                            room.getId(),
+                            updatedMessage.getId(),
+                            room.getVersion()
+                    );
 
-        afterCommitExecutor.run(metricService::markMessageUpdated);
-        return response;
+                    log.debug(
+                            "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                            room.getId(),
+                            updatedMessage.getId(),
+                            partition,
+                            publishDTO.channel(),
+                            ChatEvent.MESSAGE_UPDATED
+                    );
+
+                    afterCommitExecutor.run(metricService::markMessageUpdated);
+                    return response;
+                });
     }
 
     @Transactional
     public MessageWithRoomDTO deleteMessageById(Long messageId) {
-        Room room = roomInternalService.getAccessibleByMessageIdForUpdate(messageId, currentMember.subject());
-        Message deletedMessage = messageInternalService.deleteOneById(messageId, currentMember.subject());
+        return Observation.createNotStarted("chat.message.delete", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "delete")
+                .lowCardinalityKeyValue("message.id", String.valueOf(messageId))
+                .lowCardinalityKeyValue("chat.event", "message_deleted")
 
-        room.setVersion(room.getVersion() + 1);
-        if (room.getLastMessage() != null && room.getLastMessage().getId().equals(deletedMessage.getId())) {
-            room.setLastMessage(messageInternalService.getLatestByRoomId(room.getId()));
-        }
+                .observe(() -> {
+                    Room room = roomInternalService.getAccessibleByMessageIdForUpdate(
+                            messageId,
+                            currentMember.subject()
+                    );
+                    Message deletedMessage = messageInternalService.deleteOneById(messageId, currentMember.subject());
 
-        PublishDTO publishDTO = PublishDTO.builder()
-                .channel(RealtimeUtils.generateNamespacedChannel(RealtimeChannelNamespace.ROOM, room.getId()))
-                .data(messageEventFactory.createEvent(
-                        new MessageEventPayload(
-                                currentMember.subject(),
-                                currentMember.name(),
-                                ChatEvent.MESSAGE_DELETED,
-                                deletedMessage,
-                                room
-                        )
-                ))
-                .idempotencyKey(RealtimeUtils.generateIdempotencyKey(
-                        ChatEvent.MESSAGE_DELETED,
-                        deletedMessage.getId()
-                ))
-                .build();
+                    room.setVersion(room.getVersion() + 1);
+                    if (room.getLastMessage() != null && room.getLastMessage().getId().equals(deletedMessage.getId())) {
+                        room.setLastMessage(messageInternalService.getLatestByRoomId(room.getId()));
+                    }
 
-        long partition = cdcInternalService.calcPartition(room.getId());
-        cdcInternalService.create(new CdcCreateDTO(
-                partition,
-                RealtimeApiMethod.PUBLISH,
-                objectMapper.convertValue(publishDTO, JsonNode.class)
-        ));
+                    PublishDTO publishDTO = PublishDTO.builder()
+                            .channel(RealtimeUtils.generateNamespacedChannel(
+                                    RealtimeChannelNamespace.ROOM,
+                                    room.getId()
+                            ))
+                            .data(messageEventFactory.createEvent(
+                                    new MessageEventPayload(
+                                            currentMember.subject(),
+                                            currentMember.name(),
+                                            ChatEvent.MESSAGE_DELETED,
+                                            deletedMessage,
+                                            room
+                                    )
+                            ))
+                            .idempotencyKey(RealtimeUtils.generateIdempotencyKey(
+                                    ChatEvent.MESSAGE_DELETED,
+                                    deletedMessage.getId()
+                            ))
+                            .build();
 
-        MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(deletedMessage, room);
+                    long partition = cdcInternalService.calcPartition(room.getId());
+                    cdcInternalService.create(new CdcCreateDTO(
+                            partition,
+                            RealtimeApiMethod.PUBLISH,
+                            objectMapper.convertValue(publishDTO, JsonNode.class)
+                    ));
 
-        log.info(
-                "Message deleted: memberSubject={}, roomId={}, messageId={}, newLastMessageId={}, roomVersion={}",
-                currentMember.subject(),
-                room.getId(),
-                deletedMessage.getId(),
-                room.getLastMessage() != null ? room.getLastMessage().getId() : null,
-                room.getVersion()
-        );
+                    MessageWithRoomDTO response = messageMapper.toResponseWithRoomDTO(deletedMessage, room);
 
-        log.debug(
-                "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
-                room.getId(),
-                deletedMessage.getId(),
-                partition,
-                publishDTO.channel(),
-                ChatEvent.MESSAGE_DELETED
-        );
+                    log.info(
+                            "Message deleted: memberSubject={}, roomId={}, messageId={}, newLastMessageId={}, roomVersion={}",
+                            currentMember.subject(),
+                            room.getId(),
+                            deletedMessage.getId(),
+                            room.getLastMessage() != null ? room.getLastMessage().getId() : null,
+                            room.getVersion()
+                    );
 
-        afterCommitExecutor.run(metricService::markMessageDeleted);
-        return response;
+                    log.debug(
+                            "Realtime outbox saved: roomId={}, messageId={}, partition={}, channel={}, event={}",
+                            room.getId(),
+                            deletedMessage.getId(),
+                            partition,
+                            publishDTO.channel(),
+                            ChatEvent.MESSAGE_DELETED
+                    );
+
+                    afterCommitExecutor.run(metricService::markMessageDeleted);
+                    return response;
+                });
     }
 }

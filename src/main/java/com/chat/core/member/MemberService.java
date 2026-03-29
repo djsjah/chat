@@ -1,5 +1,7 @@
 package com.chat.core.member;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,9 +21,11 @@ import com.chat.security.CurrentMemberProvider;
 @Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class MemberService {
+    private final ObservationRegistry observationRegistry;
     private final CurrentMemberProvider currentMember;
     private final AfterCommitExecutor afterCommitExecutor;
     private final ChatMetricService chatMetricService;
+
     private final MemberRepository memberRepository;
     private final MemberMapper memberMapper;
 
@@ -34,17 +38,22 @@ public class MemberService {
 
     @Transactional
     public MemberResponseDTO create() {
-        Member member = memberRepository.save(new Member(currentMember.subject(), currentMember.name()));
-        MemberResponseDTO response = memberMapper.toResponseDTO(member);
+        return Observation.createNotStarted("chat.member.create", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "create")
 
-        log.info(
-                "Member created: memberSubject={}, memberId={}, memberName={}",
-                member.getSubject(),
-                member.getId(),
-                member.getName()
-        );
+                .observe(() -> {
+                    Member member = memberRepository.save(new Member(currentMember.subject(), currentMember.name()));
+                    MemberResponseDTO response = memberMapper.toResponseDTO(member);
 
-        afterCommitExecutor.run(chatMetricService::markMemberCreated);
-        return response;
+                    log.info(
+                            "Member created: memberSubject={}, memberId={}, memberName={}",
+                            member.getSubject(),
+                            member.getId(),
+                            member.getName()
+                    );
+
+                    afterCommitExecutor.run(chatMetricService::markMemberCreated);
+                    return response;
+                });
     }
 }

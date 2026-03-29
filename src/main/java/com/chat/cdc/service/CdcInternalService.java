@@ -1,5 +1,7 @@
 package com.chat.cdc.service;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,19 +17,28 @@ import com.chat.persistence.cdc.CdcRepository;
 @Service
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class CdcInternalService {
+    private final ObservationRegistry observationRegistry;
     private final AfterCommitExecutor afterCommitExecutor;
+
     private final CdcRepository cdcRepository;
     private final CdcProperties props;
     private final CdcMetricService cdcMetricService;
 
-    public <T> long calcPartition(T entityId) { return Math.abs(entityId.hashCode() % props.partitions()); }
+    public <T> long calcPartition(T entityId) {
+        return Math.abs(entityId.hashCode() % props.partitions());
+    }
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void create(CdcCreateDTO createDTO) {
-        cdcRepository.save(
-                new Cdc(createDTO.partition(), createDTO.method(), createDTO.payload())
-        );
+        Observation.createNotStarted("chat.cdc.create", observationRegistry)
+                .lowCardinalityKeyValue("cdc.method", createDTO.method().toString())
+                .lowCardinalityKeyValue("cdc.partition", String.valueOf(createDTO.partition()))
+                .observe(() -> {
+                    cdcRepository.save(
+                            new Cdc(createDTO.partition(), createDTO.method(), createDTO.payload())
+                    );
 
-        afterCommitExecutor.run(cdcMetricService::markCreated);
+                    afterCommitExecutor.run(cdcMetricService::markCreated);
+                });
     }
 }

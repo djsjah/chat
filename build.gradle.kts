@@ -27,6 +27,8 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5")
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
     implementation("org.openapitools:jackson-databind-nullable:0.2.6")

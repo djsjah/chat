@@ -36,11 +36,11 @@ loki.source.docker "docker_logs" {
 local.file_match "chat_service_file" {
   path_targets = [
     {
-      "__path__"  = "/var/log/chat/chat-service.log",
-      "job"       = "chat-service-file",
-      "service"   = "chat-service",
-      "source"    = "bootRun",
-      "env"       = "local",
+      "__path__" = "/var/log/chat/chat-service.log",
+      "job"      = "chat-service-file",
+      "service"  = "chat-service",
+      "source"   = "bootRun",
+      "env"      = "local",
     },
   ]
 }

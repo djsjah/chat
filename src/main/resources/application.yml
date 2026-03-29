@@ -16,6 +16,8 @@ springdoc:
     path: /api-docs
 
 spring:
+  application:
+    name: chat-service
   security:
     oauth2:
       resourceserver:
@@ -59,6 +61,12 @@ management:
     metrics:
       export:
         enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
 
 logging:
   file:
@@ -66,8 +74,10 @@ logging:
   level:
     root: INFO
     com.chat: DEBUG
+  include-application-name: false
   pattern:
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    correlation: "[${spring.application.name:},%X{traceId:-},%X{spanId:-}] "
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [${spring.application.name:},%X{traceId:-},%X{spanId:-}] %logger{36} - %msg%n"
 
 realtime-server:
   secret-key: ${REALTIME_SERVER_SECRET_KEY}

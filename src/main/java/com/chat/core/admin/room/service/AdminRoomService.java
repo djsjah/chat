@@ -1,5 +1,7 @@
 package com.chat.core.admin.room.service;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,23 +19,30 @@ import com.chat.persistence.room.repository.admin.AdminRoomRepository;
 @Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class AdminRoomService {
+    private final ObservationRegistry observationRegistry;
     private final AfterCommitExecutor afterCommitExecutor;
     private final ChatMetricService chatMetricService;
+
     private final AdminRoomRepository roomRepository;
     private final AdminRoomMapper roomMapper;
 
     @Transactional
     public AdminRoomResponseDTO create() {
-        Room room = roomRepository.save(Room.create());
-        AdminRoomResponseDTO response = roomMapper.toResponseDTO(room);
+        return Observation.createNotStarted("chat.admin.room.create", observationRegistry)
+                .lowCardinalityKeyValue("chat.operation", "create")
 
-        log.info(
-                "Room created by admin: roomId={}, roomVersion={}",
-                room.getId(),
-                room.getVersion()
-        );
+                .observe(() -> {
+                    Room room = roomRepository.save(Room.create());
+                    AdminRoomResponseDTO response = roomMapper.toResponseDTO(room);
 
-        afterCommitExecutor.run(chatMetricService::markRoomCreated);
-        return response;
+                    log.info(
+                            "Room created by admin: roomId={}, roomVersion={}",
+                            room.getId(),
+                            room.getVersion()
+                    );
+
+                    afterCommitExecutor.run(chatMetricService::markRoomCreated);
+                    return response;
+                });
     }
 }
