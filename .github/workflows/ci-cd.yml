@@ -7,8 +7,30 @@ on:
 
 jobs:
   ci:
-    name: Build and verify
+    name: Build and start application
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chat
+          POSTGRES_USER: ${{ secrets.DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ${{ secrets.DB_USER }} -d chat"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      KEYCLOAK_ISSUER_URI: ${{ secrets.KEYCLOAK_ISSUER_URI }}
+      REALTIME_SERVER_SECRET_KEY: ${{ secrets.REALTIME_SERVER_SECRET_KEY }}
 
     steps:
       - name: Checkout repository
@@ -29,11 +51,42 @@ jobs:
       - name: Build project
         run: ./gradlew build
 
+      - name: Start application
+        run: |
+          nohup ./gradlew bootRun > app.log 2>&1 &
+          echo $! > app.pid
+
+      - name: Wait for health endpoint
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:3000/actuator/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Application failed to start"
+          cat app.log
+          exit 1
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then
+            kill $(cat app.pid) || true
+          fi
+
   cd:
     name: Prepare deploy artifact
     needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      KEYCLOAK_ISSUER_URI: ${{ secrets.KEYCLOAK_ISSUER_URI }}
+      REALTIME_SERVER_SECRET_KEY: ${{ secrets.REALTIME_SERVER_SECRET_KEY }}
 
     steps:
       - name: Checkout repository
