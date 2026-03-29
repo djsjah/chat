@@ -51,9 +51,13 @@ jobs:
       - name: Build project
         run: ./gradlew build
 
-      - name: Start application
+      - name: Build boot jar
+        run: ./gradlew bootJar
+
+      - name: Start application from jar
         run: |
-          nohup ./gradlew bootRun > app.log 2>&1 &
+          JAR_FILE=$(ls build/libs/*.jar | head -n 1)
+          nohup java -jar "$JAR_FILE" > app.log 2>&1 &
           echo $! > app.pid
 
       - name: Wait for health endpoint
