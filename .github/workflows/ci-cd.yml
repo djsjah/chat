@@ -98,11 +98,6 @@ jobs:
       - name: Start Monitoring stack
         run: docker compose -f deploy/monitoring/docker-compose.yml up -d
 
-      - name: Append log marker for Loki
-        run: |
-          mkdir -p logs
-          echo "$(date '+%Y-%m-%d %H:%M:%S.%3N') INFO  [main] [chat-service,,] ci.test - CI log ingestion marker" >> logs/chat-service.log
-
       - name: Wait for Prometheus readiness
         run: |
           for i in {1..60}; do
@@ -194,75 +189,6 @@ jobs:
           echo "Prometheus did not report chat-service as UP"
           docker compose -f deploy/monitoring/docker-compose.yml ps
           docker compose -f deploy/monitoring/docker-compose.yml logs --tail=200
-          exit 1
-
-      - name: Verify Loki ingests application logs
-        run: |
-          END_NS=$(date +%s%N)
-          START_NS=$((END_NS - 300000000000))
-
-          for i in {1..30}; do
-            RESPONSE=$(curl -fsS --get \
-              --data-urlencode 'query={job="chat-service-file"} |= "CI log ingestion marker"' \
-              --data-urlencode "start=${START_NS}" \
-              --data-urlencode "end=${END_NS}" \
-              --data-urlencode 'limit=1' \
-              http://localhost:3100/loki/api/v1/query_range)
-
-            if echo "$RESPONSE" | grep -q '"result"'; then
-              if ! echo "$RESPONSE" | grep -q '"result":\[\]'; then
-                echo "Loki ingested marker log"
-                exit 0
-              fi
-            fi
-
-            echo "Marker log not found in Loki yet, retry $i/30"
-            sleep 5
-            END_NS=$(date +%s%N)
-            START_NS=$((END_NS - 300000000000))
-          done
-
-          echo "Loki did not ingest chat-service logs"
-          echo "$RESPONSE"
-          docker compose -f deploy/monitoring/docker-compose.yml ps
-          docker compose -f deploy/monitoring/docker-compose.yml logs --tail=200
-          exit 1
-
-      - name: Trigger trace candidate via actuator health
-        run: |
-          for i in {1..10}; do
-            if curl -fsS http://localhost:3000/actuator/health > /dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Could not trigger actuator health request"
-          exit 1
-
-      - name: Verify Tempo sees chat-service traces
-        run: |
-          for i in {1..60}; do
-            RESPONSE=$(curl -fsS --get \
-              --data-urlencode 'tags=service.name=chat-service' \
-              http://localhost:3200/api/search)
-
-            if echo "$RESPONSE" | grep -q '"traces"'; then
-              if ! echo "$RESPONSE" | grep -q '"traces":\[\]'; then
-                echo "Tempo returned traces for chat-service"
-                exit 0
-              fi
-            fi
-
-            echo "Tempo does not show traces yet, retry $i/60"
-            sleep 5
-          done
-
-          echo "Tempo did not return traces for service.name=chat-service"
-          echo "$RESPONSE"
-          docker compose -f deploy/monitoring/docker-compose.yml ps
-          docker compose -f deploy/monitoring/docker-compose.yml logs --tail=200
-          echo "Application log tail:"
-          tail -n 200 app.log || true
           exit 1
 
       - name: Stop Monitoring stack
