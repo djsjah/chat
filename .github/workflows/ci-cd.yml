@@ -193,11 +193,16 @@ jobs:
 
       - name: Verify Loki ingests application logs
         run: |
+          END_NS=$(date +%s%N)
+          START_NS=$((END_NS - 300000000000))
+
           for i in {1..60}; do
             RESPONSE=$(curl -fsS --get \
               --data-urlencode 'query={job="chat-service-file"}' \
+              --data-urlencode "start=${START_NS}" \
+              --data-urlencode "end=${END_NS}" \
               --data-urlencode 'limit=1' \
-              http://localhost:3100/loki/api/v1/query)
+              http://localhost:3100/loki/api/v1/query_range)
 
             echo "$RESPONSE"
 
@@ -208,6 +213,8 @@ jobs:
             fi
 
             sleep 5
+            END_NS=$(date +%s%N)
+            START_NS=$((END_NS - 300000000000))
           done
 
           echo "Loki did not ingest chat-service logs"
